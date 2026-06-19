@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────
+# SECRETS — never commit any of these
+# ─────────────────────────────────────────────────────────────
+.env
+*.env
+data/google_service_account.json
+
+# ─────────────────────────────────────────────────────────────
+# RESUME SOURCE FILES — personal data, keep local only
+# ─────────────────────────────────────────────────────────────
+data/master_resume.pdf
+data/product_resume.pdf
+data/customer_resume.pdf
+
+# ─────────────────────────────────────────────────────────────
+# APPLICATION TRACKER — contains personal job search data
+# ─────────────────────────────────────────────────────────────
+data/job_tracker.json
+data/unmatched_emails.json
+
+# ─────────────────────────────────────────────────────────────
+# SCRAPE & ENRICHMENT OUTPUTS — intermediate working files
+# ─────────────────────────────────────────────────────────────
+data/test_scrape_output.json
+data/enriched_scrape_output.json
+
+# ─────────────────────────────────────────────────────────────
+# GENERATED APPLICATION OUTPUTS — large binary files
+# ─────────────────────────────────────────────────────────────
+outputs/
+
+# ─────────────────────────────────────────────────────────────
+# PYTHON
+# ─────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# ─────────────────────────────────────────────────────────────
+# NODE (Apify MCP server pulled via npx)
+# ─────────────────────────────────────────────────────────────
+node_modules/
+.npm/
+
+# ─────────────────────────────────────────────────────────────
+# MACOS
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ─────────────────────────────────────────────────────────────
+# EDITORS
+# ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
