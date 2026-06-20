@@ -14,13 +14,14 @@ Before calling Apify, job_scout checks the cache. If a result
 < 24 hours old exists, it uses that instead.
 
 POSTING AGE CONTROL:
-  Apify's datePosted filter limits which jobs are returned:
-    1 day  → past-24-hours  ← cheapest, only brand new postings
-    7 days → past-week      ← default, good balance
-   30 days → past-month     ← wider net if you've been away
-  This controls how many jobs Apify returns, directly affecting cost.
-  1-day scraping on a daily run is the most cost-efficient approach.
-  Use 7 days for the first run or after a break.
+  LinkedIn only supports fixed datePosted filter values — not arbitrary days.
+  The --age flag maps to the nearest LinkedIn bucket:
+    --age 1          → past-24-hours   (today's postings only)
+    --age 2 to 7     → past-week       (same result — use --age 1 daily instead)
+    --age 8 to 30    → past-month
+    --age 31+        → no filter (all time)
+  There is no "past 3 days" on LinkedIn. For 2–3 day coverage,
+  run --age 1 on each day — the cache prevents double-charging.
 
 Cache location: data/apify_cache/
 Cache TTL:      24 hours (re-running same day = free)

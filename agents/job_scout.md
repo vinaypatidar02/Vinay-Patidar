@@ -19,37 +19,27 @@
 #   - scripts/enrich_jobs.py and scripts/apify_cache.py are present
 
 # ── STEP 1 — SCRAPE (with cache) ─────────────────────────────
-# Use scripts/apify_cache.py CachedScraper — NOT direct Apify calls.
-# The cache layer checks data/apify_cache/ before calling Apify.
-# If results < 24h old exist for a (keyword, location) pair → use cache.
-# Only calls Apify when cache is stale or missing.
-# This prevents paying for the same data twice on same-day reruns.
+# Call scripts/run_scout.py directly — do NOT interpret --age or
+# --expanded flags yourself. Pass them straight to the script.
 #
-# Check cache status before running:
-#   python3 scripts/apify_cache.py status
+# Mapping of user prompts → exact command to run:
 #
-# Use CachedScraper.get_batch() with these searches:
+#   "run scout"                → python3 scripts/run_scout.py
+#   "run scout --age 1"        → python3 scripts/run_scout.py --age 1
+#   "run scout --age 7"        → python3 scripts/run_scout.py --age 7
+#   "run scout --expanded"     → python3 scripts/run_scout.py --expanded
+#   "run scout --age 1 --expanded" → python3 scripts/run_scout.py --age 1 --expanded
 #
-SEARCHES = [
-    ("Analytics Lead",          "London, United Kingdom"),
-    ("Lead Data Analyst",       "London, United Kingdom"),
-    ("Lead Business Analyst",   "London, United Kingdom"),
-    ("Analytics Manager",       "London, United Kingdom"),
-    ("Lead Product Analyst",    "London, United Kingdom"),
-    ("Data Analytics Manager",  "London, United Kingdom"),
-    ("Analytics Lead",          "Manchester, United Kingdom"),
-    ("Analytics Manager",       "Manchester, United Kingdom"),
-    ("Analytics Lead",          "Birmingham, United Kingdom"),
-    ("Analytics Manager",       "Birmingham, United Kingdom"),
-]
+# The script handles everything:
+#   - Argument parsing (age, expanded)
+#   - Cache check + cost estimate printed before any Apify call
+#   - Confirmation prompt (user types Y to proceed)
+#   - CachedScraper.get_batch() with correct post_age_days
+#   - Saves raw output to data/test_scrape_output.json
+#   - Calls enrich_jobs.py automatically as a subprocess
 #
-# Call:
-#   scraper = CachedScraper()
-#   results = scraper.get_batch(SEARCHES, max_jobs=25)
-#
-# get_batch() deduplicates by job_url across all searches.
-# Save combined raw output to data/test_scrape_output.json.
-# Log: "[scout] X raw jobs (Y from cache, Z from Apify across N searches)"
+# DEFAULT behaviour (no flags): 5 searches, age 7 days
+# NEVER default to expanded list or age values not explicitly passed.
 
 # ── STEP 2 — ENRICH ──────────────────────────────────────────
 # Run enrichment as a subprocess:
