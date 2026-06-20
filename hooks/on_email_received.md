@@ -1,29 +1,143 @@
 # Hook: on_email_received
-# Stage 5 — TO BE BUILT
+# Stage 5 — ACTIVE
 #
-# LEARNING NOTE — Polling vs Event-Driven Hooks
 # ============================================================
-# True real-time email hooks require a push mechanism (Gmail
-# push notifications via Pub/Sub). For our learning project,
-# we'll use a polling approach — Claude checks Gmail every
-# N minutes using a scheduled task.
+# LEARNING NOTE — Polling vs Push
+# ============================================================
+# True real-time email hooks need Gmail Pub/Sub push webhooks
+# (a publicly-accessible server). For a local project, polling
+# is simpler and a 2-hour delay is fine for job search emails.
+# This hook uses Claude Code's scheduled execution or is run
+# manually on demand.
+# ============================================================
+
+# ── TRIGGER ───────────────────────────────────────────────────
+# Type: Scheduled polling — every 2 hours, or run manually.
 #
-# This is an important architectural decision to understand:
-#   Push model  = instant, more complex setup, needs a server
-#   Pull/Poll   = slight delay, simpler, works locally
+# Two modes:
+#   NORMAL (default) — processes last 48 hours of emails
+#     claude "check email"
 #
-# For a job search (where a 2-hour delay is fine), polling
-# is the right choice. You'll learn the push model when you
-# scale up.
+#   BACKFILL (run once) — processes last 35 days of emails
+#     claude "check email backfill"
+#     or: claude "run full email scan"
 #
-# THIS HOOK:
-#   Type: Scheduled polling (every 2 hours, or on-demand)
-#   Trigger: Run Gmail MCP search for unprocessed job emails
-#   Filter: Emails in last 48 hours, not labelled "job-processed"
-#   For each matching email:
-#     STEP 1: Extract sender, subject, body
-#     STEP 2: Classify using CLAUDE.md section 7 keyword map
-#     STEP 3: Pass classified email to agents/tracker.md
-#     STEP 4: Label email as "job-processed" in Gmail (via MCP)
+#   Why 35 days: You started applying ~1 month ago.
+#   Scanning 35 days catches all job-related emails without
+#   touching the 965+ older unrelated emails in your inbox.
+#   Estimated emails to scan: ~50–80 job-related ones.
+#   Estimated Claude API cost at Haiku 4.5: < $0.10 total.
 #
-# TO BE WRITTEN IN STAGE 5
+#   After the backfill, switch to NORMAL mode permanently.
+
+# ── STEP 1 — DETERMINE MODE ──────────────────────────────────
+# If prompt contains "backfill" / "full" / "35 days" / "first run":
+#   MODE = "backfill"
+#   time_filter = last 35 days  (newer_than:35d)
+#   Log: "[hook] BACKFILL MODE — scanning last 35 days"
+# Else:
+#   MODE = "normal"
+#   time_filter = last 48 hours  (newer_than:2d)
+#   Log: "[hook] NORMAL MODE — scanning last 48 hours"
+
+# ── STEP 2 — SEARCH GMAIL ────────────────────────────────────
+# Use Gmail MCP tool: search_messages
+#
+# NORMAL mode query (NOT labelled "job-processed", last 48h):
+#   newer_than:2d -label:job-processed
+#   subject:(application OR interview OR offer OR assessment OR
+#            "thank you for applying" OR "your application" OR
+#            "next steps" OR "technical test" OR unfortunately)
+#
+# BACKFILL mode query (last 35 days, ignore job-processed label):
+#   newer_than:35d
+#   subject:(application OR interview OR offer OR assessment OR
+#            "thank you for applying" OR "your application" OR
+#            "next steps" OR "technical test" OR unfortunately)
+#   NOTE: backfill intentionally re-reads already-labelled emails
+#   because the tracker agent is idempotent — it will not
+#   downgrade a status or duplicate history entries.
+#   35 days covers your full application history without
+#   touching the 900+ older unrelated emails.
+#
+# Additional filter for both modes — also include emails where:
+#   sender domain matches any company in job_tracker.json
+#   (catches emails without standard subject keywords)
+#
+# For each matching email, fetch full content via get_message.
+# Log: "[hook] Found X candidate emails to process"
+
+# ── STEP 3 — CLASSIFY EMAIL ──────────────────────────────────
+# For each email, use Claude API to classify it — NOT keyword matching.
+# Keyword matching is brittle; Claude understands recruiter intent
+# regardless of phrasing.
+#
+# Call the Anthropic API with this prompt for each email:
+#   System: "You are classifying recruiter emails for a job tracker.
+#            Given subject + body, return JSON with:
+#            is_job_related (bool), status (one of: Applied / Under Review /
+#            Interview Scheduled / Assessment / Offer Received / Rejected /
+#            Not Relevant), tracking_url (string or null), notes (reason).
+#            Focus on intent not exact words. If ambiguous, pick more advanced status."
+#   User:   "Subject: <subject>\n\nBody:\n<body>"
+#
+# The full prompt lives in scripts/test_email_tracker.py (CLASSIFIER_PROMPT).
+# The same prompt is used in both the test script and the live hook.
+#
+# If API call fails → fall back to _keyword_fallback() in test_email_tracker.py
+# If is_job_related = false or status = "Not Relevant" → skip this email
+#
+# Build classified email object for agents/tracker.md:
+# {
+#   "sender_email":     "<sender>",
+#   "sender_domain":    "<domain>",
+#   "subject":          "<subject>",
+#   "body":             "<body>",
+#   "received_date":    "<YYYY-MM-DD>",
+#   "extracted_status": "<status from Claude>",
+#   "extracted_url":    "<tracking_url or null>",
+#   "extracted_date":   "<interview/deadline if mentioned, else null>",
+#   "confidence":       "high",   ← Claude classification is always high confidence
+#   "classification_notes": "<Claude's reason>"
+# }
+
+# ── STEP 4 — INVOKE TRACKER AGENT ────────────────────────────
+# For each classified email:
+#   Pass classified email object to agents/tracker.md
+#   The tracker agent handles:
+#     - company + role fuzzy matching
+#     - status update (never downgrades)
+#     - appending to status_history[] and emails_received[]
+#     - writing back to job_tracker.json
+#     - running python3 scripts/sheets_sync.py push
+
+# ── STEP 5 — LABEL PROCESSED EMAILS ─────────────────────────
+# After tracker.md completes for each email:
+#   Use Gmail MCP tool: add_label → "job-processed"
+#   This prevents re-processing on the next NORMAL poll.
+#   In BACKFILL mode, already-labelled emails are re-read but
+#   the tracker agent skips updates that would not change status,
+#   so labelling them again is harmless.
+# Log: "[hook] Labelled [N] emails as job-processed"
+
+# ── STEP 6 — SUMMARY ─────────────────────────────────────────
+# Print:
+#   ═══════════════════════════════════════════
+#    Email Check — <datetime>  [MODE: normal|backfill]
+#   ═══════════════════════════════════════════
+#    Emails scanned:     X
+#    Job-related:        Y
+#    Matched + updated:  Z
+#    Unmatched:          W  (check data/unmatched_emails.json)
+#    Already up-to-date: V  (no status change needed)
+#    Labelled processed: Y
+#   ═══════════════════════════════════════════
+#   Next: open Google Sheet to review updated statuses
+
+# ── IMPLEMENTATION — macOS cron (after Stage 5 setup) ────────
+# Add to crontab (crontab -e) for automatic polling every 2 hours:
+#   0 */2 * * * cd ~/Projects/job-automation && source .venv/bin/activate && claude "check email" >> logs/email_hook.log 2>&1
+#
+# First run backfill — last 35 days only (run once manually):
+#   cd ~/Projects/job-automation && source .venv/bin/activate && claude "check email backfill"
+# Estimated cost: < $0.10 (Haiku 4.5, ~50-80 job emails × $0.001 each)

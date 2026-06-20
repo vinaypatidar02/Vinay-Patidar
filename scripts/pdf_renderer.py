@@ -389,7 +389,7 @@ def build_cover_letter(data: dict, output_path: str):
 
     yr += CL_FS * 0.8
     yr = cl_line(data.get("closing","Kind regards,"), yr, color=MID)
-    yr += CL_FS * 2.0
+    yr += CL_FS * 1.3                          # tight single-line gap, matching eBay sample
     yr = cl_line(data["name"], yr, color=DARK)
     yr += CL_FS * 0.8
     for val in [contact.get("phone",""), contact.get("email","")]:

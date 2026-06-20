@@ -1,0 +1,42 @@
+{
+  "_comment": "Claude Code project settings — hooks wiring for job-automation",
+  "_learning": "This file tells Claude Code what to do automatically after certain events. PostToolUse hooks fire after Claude successfully uses a tool. UserPromptSubmit hooks fire when you type a message. See hooks/on_job_approved.md and hooks/on_email_received.md for full documentation.",
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "_comment": "After writing job_tracker.json (e.g. after sheets_sync pull), check for newly approved jobs",
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "Read hooks/on_job_approved.md and check data/job_tracker.json for entries where status=Approved AND career_page_url is not null AND resume_path is null. If any found, confirm with user then invoke agents/application_prep.md for each."
+          }
+        ]
+      }
+    ],
+
+    "UserPromptSubmit": [
+      {
+        "_comment": "Natural language trigger for email check",
+        "matcher": "check.*email|email.*check|run.*tracker|new.*email",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "Read hooks/on_email_received.md and run the email check pipeline: search Gmail for unprocessed job emails, classify them, invoke agents/tracker.md for each, label processed emails."
+          }
+        ]
+      },
+      {
+        "_comment": "Natural language trigger for job scout",
+        "matcher": "run.*scout|scrape.*jobs|find.*jobs|new.*jobs",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "Read agents/job_scout.md and run a full job scout: scrape LinkedIn via Apify, enrich, score, write shortlisted jobs to tracker, push to Google Sheets."
+          }
+        ]
+      }
+    ]
+  }
+}

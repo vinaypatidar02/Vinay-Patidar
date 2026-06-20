@@ -35,14 +35,47 @@ a Lead Analytics professional with 8+ years of experience.
 Claude Code, CLAUDE.md, Skills, Agents, MCP Servers, and Hooks —
 in that order across 5 stages.
 
-[CONTEXT] Current stage: STAGE 2 — MCP Servers (Gmail + Apify)
-Update this line as each stage is completed.
+[CONTEXT] Current stage: STAGE 5 — Hooks & Orchestration (COMPLETE)
+All 5 stages are now complete. The full pipeline is operational.
 
-[CONTEXT] All state is stored locally. No Google Drive or Google Sheets
-are used at this stage. The single source of truth is:
-  data/job_tracker.json         ← application pipeline
+[CONTEXT] State is stored locally with Google Sheets as a human-readable sync layer.
+  data/job_tracker.json         ← agent source of truth (fast, offline, atomic)
+  Google Sheet (GOOGLE_SHEET_ID) ← human-readable mirror for viewing and editing
   data/master_resume.pdf        ← base CV, never modified
   outputs/applications/         ← one folder per application
+[CONTEXT] Sync workflow:
+  After scrape/score: python3 scripts/sheets_sync.py push
+  Before app prep:    python3 scripts/sheets_sync.py pull
+  User editable columns in Sheet: status, career_page_url, notes
+  All other columns are read-only — set by the workflow
+
+[CONTEXT] Email check modes:
+  NORMAL (every 2h):  claude "check email"          ← last 48h only
+  BACKFILL (once):    claude "check email backfill"  ← last 35 days only
+  Run backfill first (last 35 days — covers full application history).
+  Cost: < $0.10 total. All older emails are excluded deliberately.
+  Test without Gmail: python3 scripts/test_email_tracker.py
+
+[CONTEXT] Apify cache:
+  job_scout uses scripts/apify_cache.py — never calls Apify directly.
+  Cache TTL: 24 hours. Re-running scout same day uses cache (free).
+  Check cache: python3 scripts/apify_cache.py status
+  Clear stale: python3 scripts/apify_cache.py clear --old
+  Cache lives in: data/apify_cache/ (gitignored)
+
+[RULE] EDIT ORDER IN GOOGLE SHEET — must be followed to avoid incomplete prep:
+  Step 1: Paste the ATS career page URL into career_page_url column (Col M)
+  Step 2: THEN change status to "Approved" (Col L)
+  Step 3: THEN run: python3 scripts/sheets_sync.py pull
+  Reason: application_prep agent requires career_page_url to be present
+  before it will act. This prevents prep running without a destination URL.
+
+[RULE] DUPLICATION PREVENTION in application_prep:
+  Agent only processes entries where ALL THREE conditions are true:
+    status = "Approved"
+    career_page_url is not null
+    resume_path is null (prep not already done)
+  Running pull multiple times is safe — agent skips already-prepped jobs.
 
 
 # ─────────────────────────────────────────────────────────────
@@ -356,7 +389,9 @@ are used at this stage. The single source of truth is:
 
 [CONTEXT] Valid status values and what triggers each:
   "Shortlisted"          → Job scored ≥ 75, awaiting human approval
-  "Approved"             → Human approved, ready for application prep
+  "Approved"             → Human approved AND career_page_url is filled
+                           BOTH must be true before application_prep runs
+                           Edit order in Sheet: fill career_page_url → THEN set Approved
   "Prep Complete"        → Resume + cover letter generated and saved
   "Applied"              → Application submitted, confirmation received
   "Under Review"         → Recruiter/ATS confirmed active review
@@ -393,7 +428,26 @@ are used at this stage. The single source of truth is:
   outputs/applications/[Company]_[RoleShortName]_[YYYYMMDD]/
     ├── [Company]_[RoleTitle]_[YYYYMMDD].pdf      ← tailored resume
     ├── [Company]_CoverLetter_[YYYYMMDD].pdf      ← cover letter (PDF, not .md)
-    └── meta.json          ← JD URL, career page URL, tracking URL, notes
+    └── meta.json          ← JD URL, career page URL, job_id, tracking URL, notes
+
+[CONTEXT] Google Sheet column reference (for job_tracker.json ↔ Sheet sync):
+  Col A: id               ← internal workflow ID (app_001 etc.)
+  Col B: reference        ← "Company — Role" (shareable with referral contacts)
+  Col C: job_id           ← LinkedIn job ID from scrape (shareable identifier)
+  Col D: company
+  Col E: role
+  Col F: location
+  Col G: posted_date
+  Col H: fit_score
+  Col I: salary_stated
+  Col J: work_mode
+  Col K: experience_req
+  Col L: status           ← USER EDITABLE — set to "Approved" AFTER filling Col M
+  Col M: career_page_url  ← USER EDITABLE — paste ATS URL here FIRST
+  Col N: applied_date
+  Col O: notes            ← USER EDITABLE
+  Col P: visa_sponsorship_status
+  Col Q: ats_type
 
 
 # ─────────────────────────────────────────────────────────────
@@ -407,7 +461,11 @@ are used at this stage. The single source of truth is:
 # ─────────────────────────────────────────────────────────────
 
 [CONTEXT] When the Gmail hook fires, classify the email using
-          these subject/body keyword patterns → status mapping:
+          Claude API (NOT keyword matching). Claude understands
+          recruiter intent regardless of exact phrasing.
+          Prompt lives in: scripts/test_email_tracker.py (CLASSIFIER_PROMPT)
+          Keyword fallback (_keyword_fallback) used only if API call fails.
+          Reference patterns for the Claude prompt (not exhaustive):
 
   KEYWORDS                              → STATUS UPDATE
   ─────────────────────────────────────────────────────
@@ -494,8 +552,27 @@ are used at this stage. The single source of truth is:
 
   scripts/pdf_renderer.py          ← Renders resume + cover letter as styled PDFs
                                       Matches Vinay's exact uploaded format (reportlab)
-                                      Called by tailor_resume and draft_cover_letter skills
+                                      Called by tailor_resume + draft_cover_letter skills
                                       Run standalone: python3 scripts/pdf_renderer.py test
+  scripts/sheets_sync.py           ← Bidirectional sync: job_tracker.json ↔ Google Sheet
+                                      push: after scrape/enrich/prep to update sheet
+                                      pull: before application prep to read your edits
+  scripts/enrich_jobs.py           ← Post-scrape enrichment: compensation, experience,
+                                      work_mode, ATS URL detection; sorts newest-first
+  scripts/test_apify_scrape.py     ← One-off scrape test (Stage 2 validation)
+  scripts/apify_cache.py           ← Cache layer for Apify scrape results
+                                      Stores results by (keyword, location, date)
+                                      Serves cache if < 24h old, else calls Apify
+                                      CLI: python3 scripts/apify_cache.py status|clear
+  scripts/test_email_tracker.py    ← Standalone tracker test (no Gmail needed)
+                                      Simulates email → tests matching + status update
+                                      Run before first real Gmail backfill
+  scripts/setup_stage2.sh          ← Setup verification script
+  scripts/gmail_auth.js            ← One-time Gmail OAuth for Claude Code
+  .claude/settings.json            ← Claude Code hooks wiring (Stage 5)
+                                      PostToolUse: fires on_job_approved after tracker write
+                                      UserPromptSubmit: natural language triggers for scout + email check
+  data/google_service_account.json ← Google service account key (gitignored, never commit)
 
   outputs/applications/            ← One subfolder per application
                                       Each contains: resume PDF + cover letter PDF + meta.json
@@ -513,9 +590,9 @@ are used at this stage. The single source of truth is:
 [CONTEXT] Stage completion status:
   ✅ Stage 1 — CLAUDE.md & project scaffold       COMPLETE
   ✅ Stage 2 — MCP Servers (Gmail + Apify)        COMPLETE
-  ⏳ Stage 3 — Skills (score, tailor, cover)      PENDING
-  ⏳ Stage 4 — Agents (scout, prep, tracker)      PENDING
-  ⏳ Stage 5 — Hooks & orchestration              PENDING
+  ✅ Stage 3 — Skills (score, tailor, cover)      COMPLETE
+  ✅ Stage 4 — Agents (scout, prep, tracker)      COMPLETE
+  ✅ Stage 5 — Hooks & orchestration              COMPLETE
 
 
 # ─────────────────────────────────────────────────────────────
@@ -541,6 +618,77 @@ are used at this stage. The single source of truth is:
 [RULE] If uncertain about a decision (e.g. borderline fit score,
        ambiguous visa status), pause and ask for human input
        rather than making an assumption silently.
+
+
+# ─────────────────────────────────────────────────────────────
+# 12. HOOKS & ORCHESTRATION (Stage 5)
+# ─────────────────────────────────────────────────────────────
+#
+# [LEARNING] Hooks turn the pipeline from manual to event-driven.
+# Rather than running agents by hand, hooks fire automatically
+# when conditions are met. The two hooks in this project cover
+# the two most important events: a job becoming ready to prep,
+# and an email arriving about an existing application.
+#
+# Hook 1 — on_job_approved (PostToolUse on Write)
+#   Trigger: any write to data/job_tracker.json
+#   Condition: entry where status=Approved AND career_page_url
+#              not null AND resume_path is null
+#   Action: invoke application_prep agent (with user confirmation)
+#   File: hooks/on_job_approved.md
+#   Wired: .claude/settings.json → PostToolUse → Write matcher
+#
+# Hook 2 — on_email_received (UserPromptSubmit)
+#   Trigger: user types "check email" / "run tracker" / similar
+#   Action: search Gmail → classify → invoke tracker agent
+#          → label processed → push to Sheets
+#   File: hooks/on_email_received.md
+#   Wired: .claude/settings.json → UserPromptSubmit → regex matcher
+#   Also wired: "run scout" / "find jobs" → job_scout agent
+#
+# [CONTEXT] Full end-to-end workflow (all stages combined):
+#
+#   1. DISCOVER (automated, on demand)
+#      Say: "run scout" in Claude Code
+#      → job_scout agent fires via UserPromptSubmit hook
+#      → Scrapes LinkedIn (Apify) → enriches → scores → deduplicates
+#      → Writes shortlisted jobs to job_tracker.json
+#      → Pushes to Google Sheet
+#
+#   2. REVIEW (manual, ~5 min)
+#      Open Google Sheet
+#      → Review shortlisted jobs (fit score, salary, location, work mode)
+#      → For each job you want to apply to:
+#          a. Paste ATS career page URL into Col M (career_page_url)
+#          b. Change status to "Approved" in Col L
+#      → Run: python3 scripts/sheets_sync.py pull
+#
+#   3. PREPARE (semi-automated)
+#      sheets_sync.py pull writes job_tracker.json
+#      → on_job_approved hook fires (PostToolUse)
+#      → Detects Approved + career_page_url + resume_path=null
+#      → Confirms with you, then invokes application_prep agent
+#      → Tailors resume → renders PDF → writes cover letter PDF
+#      → Updates tracker → pushes to Sheet
+#
+#   4. APPLY (manual, ~5-10 min per application)
+#      Open career_page_url in browser
+#      Review tailored resume PDF from outputs/applications/
+#      Fill and submit the ATS form
+#      (Claude in Chrome can assist with form filling)
+#
+#   5. TRACK (automated, on demand)
+#      Say: "check email" in Claude Code
+#      → on_email_received hook fires
+#      → Gmail MCP searches for unprocessed job emails
+#      → Classifies each email → tracker agent matches and updates
+#      → Status updates flow: Applied → Under Review → Interview → Offer/Rejected
+#      → Pushes to Google Sheet automatically
+#
+# [RULE] Always run sheets_sync.py push after any agent modifies
+#        job_tracker.json so the Google Sheet stays in sync.
+# [RULE] Always run sheets_sync.py pull before application prep
+#        to pick up any Sheet edits (status, career_page_url, notes).
 
 # ─────────────────────────────────────────────────────────────
 # 11. MCP SERVER CONFIGURATION (Stage 2)
@@ -590,3 +738,4 @@ are used at this stage. The single source of truth is:
 #   fetchDescriptions: true       (needed by score_job + enrich_jobs)
 #   location: full name           (e.g. "London, United Kingdom")
 #   jobType: "full-time"          (filter out contract/part-time)
+

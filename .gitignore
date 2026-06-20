@@ -23,6 +23,7 @@ data/unmatched_emails.json
 # ─────────────────────────────────────────────────────────────
 data/test_scrape_output.json
 data/enriched_scrape_output.json
+data/apify_cache/
 
 # ─────────────────────────────────────────────────────────────
 # GENERATED APPLICATION OUTPUTS — large binary files

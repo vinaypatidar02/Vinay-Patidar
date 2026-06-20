@@ -209,9 +209,11 @@ for i, job in enumerate(jobs):
 
     # career_page_url — LinkedIn's public API does not expose the real ATS
     # apply URL in unauthenticated scrapes. It must be filled in manually.
-    # Workflow: when a job is approved, open its LinkedIn URL, click Apply,
-    # copy the redirect URL (Greenhouse/Lever/Workday etc.) and paste it into
-    # job_tracker.json career_page_url field before application prep runs.
+    # Workflow: when a job is approved in the Google Sheet, open its LinkedIn
+    # URL (jd_url), click Apply, copy the redirect URL (Greenhouse/Lever/
+    # Workday etc.) and paste it into Col M (career_page_url) in the Sheet.
+    # Then run: python3 scripts/sheets_sync.py pull
+    # THEN change status to "Approved" in Col L — this order is required.
     # The enrich step checks description text as a last-resort fallback only.
     ATS_PATTERNS = {
         "greenhouse":      r"https?://(?:boards\.)?greenhouse\.io/[\w/-]+",
@@ -263,14 +265,32 @@ for i, job in enumerate(jobs):
         "is_easy_apply":          is_easy,
     })
 
-OUT_PATH.write_text(json.dumps(enriched, indent=2, ensure_ascii=False))
-n = len(jobs)
+# ── Sort by recency before saving ─────────────────────────────────────────────
+# posted_date from nexgendata can be "2026-06-15" (ISO) or "3 days ago" (relative).
+# Strategy: ISO dates sort lexicographically descending (newest first).
+# Relative strings are converted to a synthetic comparable value.
+# Unknown/null dates sort last.
+def recency_sort_key(job):
+    import re as _re
+    d = str(job.get("posted_date") or job.get("postedDate") or "").strip()
+    if _re.match(r"\d{4}-\d{2}-\d{2}", d):
+        return (0, d)                          # group 0: ISO — newest = largest = first
+    m = _re.search(r"(\d+)\s+(hour|day|week|month)", d, _re.I)
+    if m:
+        n, unit = int(m.group(1)), m.group(2).lower()
+        days = n * {"hour": 1/24, "day": 1, "week": 7, "month": 30}[unit]
+        return (0, f"{99999 - days:013.3f}")   # smaller days-ago = higher key = first
+    return (2, "")                             # unknown — sort last
+
+enriched_sorted = sorted(enriched, key=recency_sort_key, reverse=True)
+OUT_PATH.write_text(json.dumps(enriched_sorted, indent=2, ensure_ascii=False))
+n = len(enriched_sorted)
 print(f"""
 [enrich] ────────────────────────────────────────
-  Jobs processed: {n}
+  Jobs processed: {n}  (sorted newest first)
   Compensation:   {stats['compensation']}/{n} found
   Experience:     {stats['experience']}/{n} found
-  Apply URL:      {stats['apply_url']}/{n} found
+  Apply URL:      {stats['apply_url']}/{n} found in description
 [saved] {OUT_PATH}
 [enrich] ────────────────────────────────────────
 """)
