@@ -14,55 +14,51 @@
 # ── TRIGGER ───────────────────────────────────────────────────
 # Type: Scheduled polling — every 2 hours, or run manually.
 #
-# Two modes:
+# Three modes:
 #   NORMAL (default) — processes last 48 hours of emails
 #     claude "check email"
 #
-#   BACKFILL (run once) — processes last 35 days of emails
-#     claude "check email backfill"
-#     or: claude "run full email scan"
+#   BACKFILL with custom age — you control how far back to go
+#     claude "check email last 30 days"   ← any number you choose
+#     claude "check email last 45 days"
+#     claude "check email backfill"       ← defaults to 35 days
 #
-#   Why 35 days: You started applying ~1 month ago.
-#   Scanning 35 days catches all job-related emails without
-#   touching the 965+ older unrelated emails in your inbox.
-#   Estimated emails to scan: ~50–80 job-related ones.
-#   Estimated Claude API cost at Haiku 4.5: < $0.10 total.
+#   Why not "all email": You have 1000+ emails. Scanning all is
+#   wasteful and costly. Since you started applying ~1 month ago,
+#   35 days covers everything. Use a higher number if needed.
 #
-#   After the backfill, switch to NORMAL mode permanently.
+# ── INBOX ONLY — deleted emails are NOT read ──────────────────
+# Gmail's search API only searches INBOX and sent mail by default.
+# It does NOT search Trash or Spam unless you explicitly add
+# "in:trash" or "in:spam" to the query.
+# Our queries never include those — so deleted emails are safe.
 
-# ── STEP 1 — DETERMINE MODE ──────────────────────────────────
-# If prompt contains "backfill" / "full" / "35 days" / "first run":
-#   MODE = "backfill"
-#   time_filter = last 35 days  (newer_than:35d)
-#   Log: "[hook] BACKFILL MODE — scanning last 35 days"
-# Else:
-#   MODE = "normal"
-#   time_filter = last 48 hours  (newer_than:2d)
-#   Log: "[hook] NORMAL MODE — scanning last 48 hours"
+# ── STEP 1 — DETERMINE MODE AND AGE ──────────────────────────
+# Parse number from prompt if present:
+#   "check email last 30 days"  → days = 30
+#   "check email last 45 days"  → days = 45
+#   "check email backfill"      → days = 35 (default backfill)
+#   "check email"               → days = 2  (normal, 48h)
+#
+# Set time_filter = newer_than:{days}d
+# Log: "[hook] MODE: normal|backfill  scanning last {days} days"
 
-# ── STEP 2 — SEARCH GMAIL ────────────────────────────────────
+# ── STEP 2 — SEARCH GMAIL (INBOX ONLY) ──────────────────────
 # Use Gmail MCP tool: search_messages
+# Scope: inbox only — Trash and Spam are automatically excluded.
 #
-# NORMAL mode query (NOT labelled "job-processed", last 48h):
-#   newer_than:2d -label:job-processed
+# Query (both modes — only time window differs):
+#   newer_than:{days}d -label:job-processed
 #   subject:(application OR interview OR offer OR assessment OR
 #            "thank you for applying" OR "your application" OR
 #            "next steps" OR "technical test" OR unfortunately)
 #
-# BACKFILL mode query (last 35 days, ignore job-processed label):
-#   newer_than:35d
-#   subject:(application OR interview OR offer OR assessment OR
-#            "thank you for applying" OR "your application" OR
-#            "next steps" OR "technical test" OR unfortunately)
-#   NOTE: backfill intentionally re-reads already-labelled emails
-#   because the tracker agent is idempotent — it will not
-#   downgrade a status or duplicate history entries.
-#   35 days covers your full application history without
-#   touching the 900+ older unrelated emails.
+# Additional match — also include emails where sender domain
+# matches any company domain in job_tracker.json
+# (catches emails without standard subject keywords).
 #
-# Additional filter for both modes — also include emails where:
-#   sender domain matches any company in job_tracker.json
-#   (catches emails without standard subject keywords)
+# In backfill mode: remove -label:job-processed so already-labelled
+# emails are re-read. The tracker is idempotent — it won't duplicate.
 #
 # For each matching email, fetch full content via get_message.
 # Log: "[hook] Found X candidate emails to process"

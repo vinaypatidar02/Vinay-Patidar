@@ -17,9 +17,19 @@
 #   2. career_page_url is not null and not empty
 #   3. resume_path is null (prep not already done)
 #
-# If status = "Approved" but career_page_url is null:
+# EASY APPLY HANDLING:
+#   If career_page_url = "EASY_APPLY" (sentinel value you enter in Sheet):
+#     → Process normally — generate resume + cover letter as usual
+#     → Set is_easy_apply = true in meta.json
+#     → Completion summary will say:
+#       "Submit via LinkedIn Easy Apply button — use the generated
+#        resume PDF as reference when filling the form fields"
+#     → Do NOT skip or block — prep is still useful for Easy Apply
+#
+# If status = "Approved" but career_page_url is null or empty:
 #   Log: "SKIPPED [Company] / [Role] — career_page_url missing.
-#         Paste ATS URL in Google Sheet Col M, then re-run pull."
+#         For ATS roles: paste URL in Sheet Col M then re-run pull.
+#         For Easy Apply: enter 'EASY_APPLY' in Sheet Col M."
 #   Do NOT process. Move to next entry.
 #
 # If resume_path is already set:
@@ -111,12 +121,14 @@
 #   ═══════════════════════════════════════
 #    Application Prep — <date>
 #   ═══════════════════════════════════════
-#    Processed:  X jobs
-#    Skipped:    Y jobs (career_page_url missing)
-#    Skipped:    Z jobs (already prepped)
+#    Processed:   X jobs
+#      ATS jobs:  N  → open career_page_url to submit
+#      Easy Apply: M → use LinkedIn Easy Apply button
+#    Skipped:     Y jobs (career_page_url missing — enter URL or EASY_APPLY)
+#    Skipped:     Z jobs (already prepped)
 #   ───────────────────────────────────────
-#    Resume + cover letter PDFs are in outputs/applications/
-#    Next step: open career_page_url for each job and submit.
-#    After submitting, update status to "Applied" in the Sheet
-#    or wait for confirmation email to trigger auto-update.
+#    Resume + cover letter PDFs in outputs/applications/
+#    For ATS roles: open career_page_url and submit the form
+#    For Easy Apply: open jd_url → click Easy Apply → use
+#      the generated resume PDF to fill in the form fields
 #   ═══════════════════════════════════════

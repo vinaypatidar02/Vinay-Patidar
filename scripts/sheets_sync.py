@@ -199,7 +199,101 @@ def push():
                           f'=HYPERLINK("{cp}","Apply")')
 
     print(f"  ✓ Pushed {len(rows)} rows to 'Applications' sheet")
+
+    # ── Add dropdowns for user-editable columns ───────────────────────────────
+    # Uses Google Sheets API batchUpdate for data validation rules.
+    # Only applied to data rows (row 2 onwards), not the header.
+    if len(rows) > 0:
+        try:
+            _apply_dropdowns(wb, ws, len(rows))
+            print(f"  ✓ Dropdowns applied to status and career_page_url columns")
+        except Exception as e:
+            print(f"  ⚠ Dropdown setup failed (non-critical): {e}")
+
     print(f"  Sheet URL: https://docs.google.com/spreadsheets/d/{SHEET_ID}")
+
+
+def _apply_dropdowns(wb, ws, num_rows: int):
+    """
+    Apply data validation dropdowns to user-editable columns.
+    Uses raw Sheets API batchUpdate — no extra dependencies needed.
+
+    Dropdowns:
+      Col L (status, index 11)      — valid pipeline statuses
+      Col M (career_page_url, 13)   — hint values: EASY_APPLY or paste URL
+        (can't enforce URL format via dropdown, so we add a note dropdown
+         that reminds you of the two valid entry types)
+    """
+    STATUS_COL    = HEADERS.index("status")           # 0-indexed = 11
+    CAREER_COL    = HEADERS.index("career_page_url")  # 0-indexed = 13
+
+    STATUS_VALUES = [
+        "Shortlisted", "Approved", "Prep Complete", "Applied",
+        "Under Review", "Interview Scheduled", "Assessment",
+        "Offer Received", "Rejected", "Withdrawn"
+    ]
+
+    CAREER_HINTS = [
+        "EASY_APPLY",
+        "Paste ATS URL here",
+    ]
+
+    spreadsheet_id = wb.id
+    creds          = wb.client.auth
+
+    # Build Sheets API request using gspread's underlying service
+    # gspread exposes the raw service via client.auth._default_http
+    # We use requests directly with the service account token
+    import json as _json
+    from google.auth.transport.requests import Request as GARequest
+
+    # Refresh credentials if needed
+    if not creds.valid:
+        creds.refresh(GARequest())
+
+    token = creds.token
+
+    def col_range(col_0idx):
+        """Build GridRange dict for a full column (data rows only)."""
+        return {
+            "sheetId":          ws.id,
+            "startRowIndex":    1,               # row 2 (0-indexed)
+            "endRowIndex":      num_rows + 1,
+            "startColumnIndex": col_0idx,
+            "endColumnIndex":   col_0idx + 1,
+        }
+
+    def dropdown_rule(values, col_0idx, strict=True):
+        return {
+            "setDataValidation": {
+                "range": col_range(col_0idx),
+                "rule": {
+                    "condition": {
+                        "type": "ONE_OF_LIST",
+                        "values": [{"userEnteredValue": v} for v in values],
+                    },
+                    "showCustomUi":  True,
+                    "strict":        strict,
+                }
+            }
+        }
+
+    requests = [
+        dropdown_rule(STATUS_VALUES, STATUS_COL, strict=True),
+        # career_page_url: show hint dropdown but not strict
+        # (user needs to paste a real URL too, so we can't enforce a fixed list)
+        dropdown_rule(CAREER_HINTS, CAREER_COL, strict=False),
+    ]
+
+    import urllib.request as _ureq
+    url     = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate"
+    payload = _json.dumps({"requests": requests}).encode()
+    req     = _ureq.Request(url, data=payload, method="POST")
+    req.add_header("Authorization",  f"Bearer {token}")
+    req.add_header("Content-Type",   "application/json")
+
+    with _ureq.urlopen(req, timeout=20) as resp:
+        resp.read()   # consume response
 
 
 # ─────────────────────────────────────────────────────────────────────────────

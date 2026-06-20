@@ -170,50 +170,185 @@ def _keyword_fallback(subject: str, body: str) -> dict:
         "notes": "No keywords matched"
     }
 
-def fuzzy_match(a, b, max_dist=3):
-    """Simple fuzzy match — checks if a is substring of b or edit distance ≤ max_dist."""
-    a, b = a.lower().strip(), b.lower().strip()
-    if a in b or b in a: return True
-    # Character-level edit distance (DP)
-    if abs(len(a)-len(b)) > max_dist: return False
-    dp = list(range(len(b)+1))
-    for i, ca in enumerate(a):
-        ndp = [i+1]
-        for j, cb in enumerate(b):
-            ndp.append(min(dp[j]+(ca!=cb), dp[j+1]+1, ndp[j]+1))
-        dp = ndp
-    return dp[len(b)] <= max_dist
 
-def find_match(tracker_apps, sender_domain, subject, body):
+# ── Company alias map ─────────────────────────────────────────────────────────
+# Maps known aliases / abbreviations → canonical name as it appears in tracker.
+# Add entries here whenever you notice a mismatch between email and tracker.
+COMPANY_ALIASES = {
+    # Financial / banking
+    "jpmc":               "JPMorgan Chase",
+    "jp morgan":          "JPMorgan Chase",
+    "j.p. morgan":        "JPMorgan Chase",
+    "jpmorgan":           "JPMorgan Chase",
+    "jpmorgan chase":     "JPMorgan Chase",
+    # Recruiters / agencies that email on behalf of companies
+    "greenhouse":         None,   # ATS platform — match by role only
+    "lever":              None,
+    "workday":            None,
+    "ashby":              None,
+    "smartrecruiters":    None,
+    # Add more as you encounter them:
+    # "amzn":             "Amazon",
+    # "meta platforms":   "Meta",
+}
+
+# ATS sender domains — emails come from these domains on behalf of companies
+# Company name must be extracted from email body/subject instead
+ATS_DOMAINS = {
+    "greenhouse.io", "lever.co", "myworkdayjobs.com", "ashbyhq.com",
+    "smartrecruiters.com", "icims.com", "taleo.net", "bamboohr.com",
+    "teamtailor.com", "personio.de", "workable.com", "recruitee.com",
+    "pinpointhq.com", "jobvite.com", "successfactors.com",
+}
+
+
+def normalise_company(name: str) -> str:
+    """Lowercase, strip punctuation, collapse whitespace for comparison."""
+    name = name.lower().strip()
+    name = re.sub(r"[&,\.\-\(\)]", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    # Strip common suffixes that vary between sources
+    for suffix in [" ltd", " limited", " plc", " inc", " llc",
+                   " group", " technologies", " technology",
+                   " solutions", " services", " global"]:
+        if name.endswith(suffix):
+            name = name[:-len(suffix)].strip()
+    return name
+
+
+def company_tokens(name: str) -> set:
+    """Return meaningful word tokens from a company name."""
+    norm = normalise_company(name)
+    return {t for t in norm.split() if len(t) > 2}
+
+
+def companies_match(a: str, b: str) -> bool:
     """
-    Find matching application using dual-signal matching (CLAUDE.md Section 7).
-    Returns (matched_app, confidence) or (None, None).
+    Robust company matching that handles:
+    - Exact normalised match
+    - One is substring of the other (post-normalisation)
+    - Alias map lookup
+    - Token overlap (≥ 1 meaningful shared token)
+    - Abbreviations (JPMC vs JPMorgan Chase)
     """
-    combined = (subject + " " + body).lower()
+    a_norm = normalise_company(a)
+    b_norm = normalise_company(b)
 
-    company_matches = []
-    for app in tracker_apps:
-        company = app.get("company", "").lower()
-        domain  = sender_domain.lower().replace("www.","")
-        # Signal A: company name in domain or email text
-        domain_base = domain.split(".")[0]
-        if fuzzy_match(domain_base, company) or fuzzy_match(company, combined[:500]):
-            company_matches.append(app)
+    # Direct normalised match
+    if a_norm == b_norm:
+        return True
+    # Substring either direction
+    if a_norm in b_norm or b_norm in a_norm:
+        return True
 
-    if not company_matches:
-        return None, None
+    # Alias lookup — check if either resolves to same canonical name
+    a_canon = COMPANY_ALIASES.get(a_norm, a_norm)
+    b_canon = COMPANY_ALIASES.get(b_norm, b_norm)
+    if a_canon and b_canon:
+        if normalise_company(a_canon) == normalise_company(b_canon):
+            return True
 
-    # Signal B: role match within company matches
-    for app in company_matches:
-        role_words = [w for w in app.get("role","").lower().split() if len(w) > 3]
-        if any(w in combined for w in role_words):
+    # Token overlap — at least 1 meaningful shared word
+    a_tok = company_tokens(a)
+    b_tok = company_tokens(b)
+    if a_tok & b_tok:
+        return True
+
+    # Initialism check — e.g. "JPMC" matches "JPMorgan Chase"
+    # Build initialism from multi-word company name
+    a_words = a_norm.split()
+    b_words = b_norm.split()
+    if len(b_words) >= 2:
+        b_init = "".join(w[0] for w in b_words)
+        if a_norm == b_init:
+            return True
+    if len(a_words) >= 2:
+        a_init = "".join(w[0] for w in a_words)
+        if b_norm == a_init:
+            return True
+
+    return False
+
+
+def extract_company_from_text(text: str, known_companies: list) -> list:
+    """
+    Scan full email text for mentions of known company names.
+    Returns list of matching companies found.
+    """
+    found = []
+    text_lower = text.lower()
+    for company in known_companies:
+        norm = normalise_company(company)
+        if not norm:
+            continue
+        # Direct name mention in text
+        if norm in text_lower:
+            found.append(company)
+            continue
+        # Any alias mention
+        for alias, canonical in COMPANY_ALIASES.items():
+            if canonical and normalise_company(canonical) == norm:
+                if alias in text_lower:
+                    found.append(company)
+                    break
+    return found
+
+
+def find_match(tracker_apps, sender_email, sender_domain, subject, body):
+    """
+    Robust application matching using multiple signals:
+
+    Signal A — Sender domain (if not an ATS platform):
+        Match sender domain against company names in tracker.
+
+    Signal B — Company name in full email text:
+        Scan entire subject + body for company name mentions.
+        Uses normalisation, alias map, token overlap, and initialism check.
+
+    Signal C — Role keyword match:
+        Among company matches, find the specific role using title words.
+
+    Returns (matched_app, confidence) or (None, reason_string).
+    """
+    full_text   = (subject + " " + body)
+    full_lower  = full_text.lower()
+    domain_base = sender_domain.lower().replace("www.", "").split(".")[0]
+    is_ats      = any(ats in sender_domain.lower() for ats in ATS_DOMAINS)
+
+    known_companies = list({a.get("company", "") for a in tracker_apps if a.get("company")})
+
+    # ── Signal A: domain match (skip for ATS senders) ────────────────────────
+    domain_matched = []
+    if not is_ats:
+        for app in tracker_apps:
+            if companies_match(domain_base, app.get("company", "")):
+                domain_matched.append(app)
+
+    # ── Signal B: company name in full email text ─────────────────────────────
+    text_matched_companies = extract_company_from_text(full_text, known_companies)
+    text_matched = [a for a in tracker_apps
+                    if a.get("company", "") in text_matched_companies]
+
+    # Combine, deduplicate
+    all_company_matches = list({a["id"]: a for a in domain_matched + text_matched}.values())
+
+    if not all_company_matches:
+        return None, "no_company_match"
+
+    # ── Signal C: role keyword match ──────────────────────────────────────────
+    for app in all_company_matches:
+        role_words = [w for w in app.get("role", "").lower().split()
+                      if len(w) > 3 and w not in {"lead", "data", "with", "your", "this", "that"}]
+        if any(w in full_lower for w in role_words):
             return app, "high"
 
-    # Fallback: single company match, no role signal
-    if len(company_matches) == 1:
-        return company_matches[0], "low"
+    # Single company match without role signal
+    if len(all_company_matches) == 1:
+        return all_company_matches[0], "low"
 
+    # Multiple company matches, no role signal to disambiguate
     return None, "multiple_matches"
+
 
 def update_tracker(app_id, new_status, email_record, tracker):
     """Apply status update to tracker entry. Returns True if changed."""
@@ -316,16 +451,16 @@ def main():
     print(f"  Reason:        {result.get('notes','')}")
     if url: print(f"  Tracking URL:  {url}")
 
-    # Match
-    matched_app, confidence = find_match(active, domain, subject, body)
+    # Match — pass full sender email + domain
+    matched_app, confidence = find_match(active, sender, domain, subject, body)
 
     if not matched_app:
-        if confidence == "multiple_matches":
-            print(f"\n  ⚠ Multiple companies matched — cannot safely assign.")
-            print(f"    Logged to data/unmatched_emails.json")
-        else:
-            print(f"\n  ✗ No matching application found for domain: {domain}")
-            print(f"    Logged to data/unmatched_emails.json")
+        reason_map = {
+            "no_company_match":  f"No company in tracker matched sender '{sender}' or email text.",
+            "multiple_matches":  "Multiple companies matched — cannot safely assign without role signal.",
+        }
+        print(f"\n  ✗ {reason_map.get(confidence, 'No match found.')}")
+        print(f"  Tip: Check COMPANY_ALIASES in the script to add '{domain}' → company name.")
 
         # Log unmatched
         unmatched_path = ROOT / "data" / "unmatched_emails.json"

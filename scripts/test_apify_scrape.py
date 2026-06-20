@@ -75,6 +75,22 @@ SCRAPE_INPUT = {
     "fetchDescriptions":  True,
 }
 
+# Allow --age flag to override posting age from command line
+# Usage: python3 scripts/test_apify_scrape.py --age 1
+_age = 7  # default
+if "--age" in sys.argv:
+    try:
+        _age = int(sys.argv[sys.argv.index("--age") + 1])
+    except (IndexError, ValueError):
+        print("Usage: python3 scripts/test_apify_scrape.py --age <days>")
+        sys.exit(1)
+
+SCRAPE_INPUT["datePosted"] = (
+    "past-24-hours" if _age <= 1 else
+    "past-week"     if _age <= 7 else
+    "past-month"    if _age <= 30 else ""
+)
+
 print("\n[apify] Starting test scrape...")
 print(f"  Actor:    {ACTOR}")
 print(f"  Query:    {SCRAPE_INPUT['keywords']} in {SCRAPE_INPUT['location']}")
