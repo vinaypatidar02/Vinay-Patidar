@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Job Automation Workflow — Vinay Patidar</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f8fafc;color:#363C49;padding:20px}
@@ -44,8 +43,8 @@ code{display:block;background:#1e293b;color:#7dd3fc;border-radius:5px;padding:6p
 .warn{background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:9px 12px;font-size:12px;color:#7f1d1d;margin-top:10px}
 .tip{background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:9px 12px;font-size:12px;color:#14532d;margin-top:10px}
 .note{background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:9px 12px;font-size:12px;color:#713f12;margin-top:10px}
-.lbl{font-size:11px;color:var(--gr);min-width:115px;padding-top:1px;flex-shrink:0}
 .row{display:flex;gap:8px;margin:4px 0;align-items:flex-start;font-size:12px}
+.lbl{font-size:11px;color:var(--gr);min-width:115px;padding-top:1px;flex-shrink:0}
 .sep{font-size:11px;font-weight:600;color:var(--teal);margin:12px 0 6px;letter-spacing:.3px;text-transform:uppercase}
 table.sh{width:100%;font-size:12px;border-collapse:collapse}
 table.sh th{background:var(--teal);color:#fff;padding:7px 10px;text-align:left;font-weight:600;font-size:11px}
@@ -90,39 +89,42 @@ table.sh tr:nth-child(even) td{background:var(--bg2)}
 <div id="s0" class="step open" onclick="tog(0)">
   <div class="step-hdr"><div class="step-num">0</div><div class="step-info"><div class="step-title">Start Claude Code session<span class="badge b-first">Always first</span></div><div class="step-sub">Every time you open the project</div></div><div class="tog" id="tog0">−</div></div>
   <div class="body" id="b0">
-    <div class="lead"><strong>Leads to:</strong> Claude reads CLAUDE.md — knows your profile, 52+ applications, and full pipeline state</div>
+    <div class="lead"><strong>Leads to:</strong> Claude reads CLAUDE.md automatically — knows your profile, 52+ applications, and full pipeline state</div>
     <div class="sep">Terminal</div>
     <code>cd ~/Projects/job-automation
 source .venv/bin/activate
 claude</code>
     <div class="sep">First prompt — verify orientation</div>
     <div class="prompt">Read CLAUDE.md and confirm all 5 stages are complete and tell me how many applications are in the tracker</div>
-    <div class="note">Desktop app: File → Open Folder → job-automation. Same commands apply in the built-in terminal.</div>
+    <div class="note">Desktop app: File → Open Folder → job-automation. Same commands apply in the built-in terminal. Leave the venv active for the whole session.</div>
   </div>
 </div>
 
 <div id="s1" class="step" onclick="tog(1)">
-  <div class="step-hdr"><div class="step-num">1</div><div class="step-info"><div class="step-title">Discover new jobs<span class="badge b-auto">Automated</span></div><div class="step-sub">2–3× per week. Check cache first to avoid redundant spend</div></div><div class="tog" id="tog1">+</div></div>
+  <div class="step-hdr"><div class="step-num">1</div><div class="step-info"><div class="step-title">Discover new jobs<span class="badge b-auto">Automated</span></div><div class="step-sub">2–3× per week. Use --age 1 for daily runs to minimise cost</div></div><div class="tog" id="tog1">+</div></div>
   <div class="body" id="b1" style="display:none">
     <div class="lead"><strong>Leads to:</strong> New shortlisted jobs in job_tracker.json and Google Sheet for your review</div>
-    <div class="sep">Check cache &amp; control posting age</div>
-    <code>python3 scripts/apify_cache.py status --age 1   # see cost for 1-day filter
-python3 scripts/apify_cache.py status --age 7   # see cost for 7-day filter</code>
-    <div class="sep">Run scout in Claude Code</div>
-    <div class="prompt">run scout</div>
-    <div class="prompt">run scout --age 1</div>
-    <div style="font-size:11px;color:var(--gr);margin:4px 0 10px">Also works: "find new jobs" / "scrape jobs"</div>
+    <div class="sep">How to run</div>
+    <div class="prompt">python3 scripts/run_scout.py</div>
+    <div class="prompt">python3 scripts/run_scout.py --age 1</div>
+    <div class="prompt">python3 scripts/run_scout.py --age 7 --expanded</div>
+    <div style="font-size:11px;color:var(--gr);margin:4px 0 10px">run_scout.py shows a cost estimate and asks Y/n before calling Apify. Flags:<br>
+    --age 1 = today only (cheapest) · --age 7 = last week · --expanded = 10 searches instead of 5</div>
+    <div class="note"><strong>LinkedIn date filter buckets (no arbitrary days):</strong><br>
+    --age 1 → past-24-hours &nbsp;·&nbsp; --age 2–7 → past-week &nbsp;·&nbsp; --age 8–30 → past-month<br>
+    For 2–3 day coverage: run --age 1 each day — cache prevents double-charging.</div>
+    <div class="sep">Cache management</div>
+    <code>python3 scripts/apify_cache.py status       # see what's cached and age
+python3 scripts/apify_cache.py clear --old  # remove stale entries only
+python3 scripts/apify_cache.py clear        # force completely fresh scrape</code>
     <div class="sep">What happens automatically</div>
-    <div class="arr">Apify scrapes LinkedIn (10 keyword × location combos, max 25 each)</div>
-    <div class="arr">Cache saves results — re-running same day is free ($0.00)</div>
+    <div class="arr">run_scout.py checks cache first — same-day re-run costs $0.00</div>
+    <div class="arr">Apify scrapes LinkedIn (5 searches default, 10 if --expanded)</div>
     <div class="arr">enrich_jobs.py extracts salary, work mode, experience · sorted newest first</div>
     <div class="arr">score_job skill scores each JD 0–100 against your profile</div>
     <div class="arr">3-signal duplicate check against all 52+ existing entries</div>
     <div class="arr">Shortlisted (≥75) added · Review Needed (60–74) flagged · &lt;60 rejected</div>
-    <div class="arr">Google Sheet updated automatically</div>
-    <div class="sep">Cache management</div>
-    <code>python3 scripts/apify_cache.py clear --old  # remove stale only
-python3 scripts/apify_cache.py clear        # force fresh scrape</code>
+    <div class="arr">Google Sheet updated automatically via sheets_sync push</div>
   </div>
 </div>
 
@@ -134,23 +136,27 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
     <div class="row"><span class="lbl">Col H — Fit Score</span><span>Focus on ≥ 75. 60–74 = Review Needed</span></div>
     <div class="row"><span class="lbl">Col I — Salary</span><span>Upper range &gt; £85k qualifies even if lower end is below</span></div>
     <div class="row"><span class="lbl">Col J — Work Mode</span><span>Remote / Hybrid (Xd/week) / On-site</span></div>
-    <div class="row"><span class="lbl">Col K — JD link</span><span>Click "View JD" to read full posting</span></div>
-    <div class="warn"><strong>Critical edit order — do NOT reverse:</strong><br><br>1. Open LinkedIn URL → click Apply → copy ATS redirect URL<br>2. Paste URL into <strong>Col M (career_page_url)</strong> — use the dropdown<br>3. Then set <strong>Col L (status)</strong> to <strong>Approved</strong> via dropdown<br><br>For Easy Apply jobs: enter <strong>EASY_APPLY</strong> in Col M instead</div>
-    <div class="sep">Pull edits back to local tracker</div>
+    <div class="row"><span class="lbl">Col K — JD link</span><span>Click "View JD" to read full posting on LinkedIn</span></div>
+    <div class="warn"><strong>Critical edit order — do NOT reverse:</strong><br><br>
+    1. Open LinkedIn URL → click Apply → copy the ATS redirect URL<br>
+    2. Paste URL into <strong>Col M (career_page_url)</strong> — dropdown shows EASY_APPLY option<br>
+    3. Then set <strong>Col L (status)</strong> to <strong>Approved</strong> via dropdown<br><br>
+    For Easy Apply jobs: enter <strong>EASY_APPLY</strong> in Col M instead of a URL</div>
+    <div class="sep">Pull your edits back to the local tracker</div>
     <code>python3 scripts/sheets_sync.py pull</code>
-    <div style="font-size:11px;color:var(--gr);margin-top:5px">Triggers on_job_approved hook automatically.</div>
+    <div style="font-size:11px;color:var(--gr);margin-top:5px">The PostToolUse hook then checks if any Approved jobs have career_page_url set and alerts you.</div>
   </div>
 </div>
 
 <div id="s3" class="step" onclick="tog(3)">
-  <div class="step-hdr"><div class="step-num">3</div><div class="step-info"><div class="step-title">Prepare applications<span class="badge b-semi">Semi-automated</span></div><div class="step-sub">Fires automatically after pull detects Approved jobs</div></div><div class="tog" id="tog3">+</div></div>
+  <div class="step-hdr"><div class="step-num">3</div><div class="step-info"><div class="step-title">Prepare applications<span class="badge b-semi">Semi-automated</span></div><div class="step-sub">Triggered by hook after pull, or run manually in Claude Code</div></div><div class="tog" id="tog3">+</div></div>
   <div class="body" id="b3" style="display:none">
-    <div class="lead"><strong>Leads to:</strong> Tailored resume PDF + cover letter PDF · Tracker → Prep Complete · Sheet synced</div>
-    <div class="sep">Manual trigger (or fires automatically)</div>
+    <div class="lead"><strong>Leads to:</strong> Tailored resume PDF + cover letter PDF in outputs/applications/ · Tracker → Prep Complete · Sheet synced</div>
+    <div class="sep">Run in Claude Code</div>
     <div class="prompt">Check for approved jobs and run application prep</div>
     <div class="sep">What happens per approved job</div>
     <div class="arr">Fetches JD text from LinkedIn URL</div>
-    <div class="arr">Selects best resume variant: product / customer / master</div>
+    <div class="arr">Selects best resume variant: product / customer / master based on JD domain</div>
     <div class="arr">tailor_resume skill rewrites bullets to match JD keywords — zero fabrication</div>
     <div class="arr">pdf_renderer.py renders resume as PDF — your exact teal sidebar format</div>
     <div class="arr">draft_cover_letter skill writes 4-paragraph letter in your eBay sample style</div>
@@ -158,47 +164,49 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
     <div class="arr">Tracker → Prep Complete · Google Sheet synced</div>
     <div class="sep">Output location</div>
     <code>outputs/applications/[Company]_[Role]_[Date]/
-  [Company]_[Role]_[Date].pdf       ← resume
+  [Company]_[Role]_[Date].pdf       ← tailored resume
   [Company]_CoverLetter_[Date].pdf  ← cover letter
-  meta.json</code>
-    <div class="tip"><strong>Zero marginal cost:</strong> Tailoring runs via your Claude subscription — no API charges. Only email classification uses the API (~$0.001/email).</div>
+  meta.json                         ← job_id, ATS type, fit score, prep date</code>
+    <div class="tip"><strong>Zero marginal cost:</strong> Tailoring runs inside Claude Code via your subscription — no API charges. Only email classification uses the API (~$0.001/email via Haiku 4.5).</div>
   </div>
 </div>
 
 <div id="s4" class="step" onclick="tog(4)">
   <div class="step-hdr"><div class="step-num">4</div><div class="step-info"><div class="step-title">Submit applications<span class="badge b-man">Manual · ~10 min each</span></div><div class="step-sub">After Prep Complete — open career_page_url for each job</div></div><div class="tog" id="tog4">+</div></div>
   <div class="body" id="b4" style="display:none">
-    <div class="lead"><strong>Leads to:</strong> Application submitted → confirmation email triggers auto status update</div>
+    <div class="lead"><strong>Leads to:</strong> Application submitted → confirmation email triggers automatic status update</div>
     <div class="sep">ATS roles (Greenhouse / Lever / Workday etc.)</div>
     <div class="arr">Open career_page_url from Col M in the Sheet</div>
     <div class="arr">Review tailored resume PDF from outputs/applications/</div>
     <div class="arr">Fill and submit the form (5–15 min)</div>
     <div class="sep">Easy Apply roles</div>
-    <div class="arr">Open jd_url from Col K</div>
-    <div class="arr">Click LinkedIn Easy Apply button</div>
-    <div class="arr">Use generated resume PDF as reference to fill form fields</div>
-    <div class="tip"><strong>Claude in Chrome:</strong> Open alongside the ATS form — it can read fields and help fill them using your tailored resume.</div>
+    <div class="arr">Open jd_url from Col K in the Sheet</div>
+    <div class="arr">Click the LinkedIn Easy Apply button</div>
+    <div class="arr">Use the generated resume PDF as reference to fill form fields</div>
+    <div class="tip"><strong>Claude in Chrome:</strong> Open alongside the ATS form — it can read the fields and help fill them using your tailored resume content.</div>
   </div>
 </div>
 
 <div id="s5" class="step" onclick="tog(5)">
-  <div class="step-hdr"><div class="step-num">5</div><div class="step-info"><div class="step-title">Track application status<span class="badge b-auto">Automated</span></div><div class="step-sub">Every 2 hours or manually. First time: run backfill once</div></div><div class="tog" id="tog5">+</div></div>
+  <div class="step-hdr"><div class="step-num">5</div><div class="step-info"><div class="step-title">Track application status<span class="badge b-auto">Automated</span></div><div class="step-sub">Run manually or set up cron. First time: backfill once</div></div><div class="tog" id="tog5">+</div></div>
   <div class="body" id="b5" style="display:none">
-    <div class="lead"><strong>Leads to:</strong> Status auto-updates in Sheet: Applied → Under Review → Interview → Offer/Rejected</div>
-    <div class="sep">First time — backfill (you control the window)</div>
+    <div class="lead"><strong>Leads to:</strong> Status auto-updates in Sheet: Applied → Under Review → Interview Scheduled → Offer/Rejected</div>
+    <div class="sep">First time only — backfill (you control the window)</div>
     <div class="prompt">check email backfill</div>
     <div class="prompt">check email last 30 days</div>
     <div class="prompt">check email last 45 days</div>
-    <div style="font-size:11px;color:var(--gr);margin:4px 0 10px">Reads inbox only — Trash and Spam automatically excluded.</div>
-    <div class="sep">Ongoing check</div>
+    <div style="font-size:11px;color:var(--gr);margin:4px 0 10px">Reads inbox only — Trash and Spam are automatically excluded by Gmail API.</div>
+    <div class="sep">Ongoing check (every 2 hours or on demand)</div>
     <div class="prompt">check email</div>
     <div class="sep">What happens automatically</div>
-    <div class="arr">Gmail MCP fetches unprocessed emails (last 48h, inbox only)</div>
+    <div class="arr">Gmail MCP fetches unprocessed emails (last 48h, inbox only, not labelled job-processed)</div>
     <div class="arr">Claude API (Haiku 4.5) classifies intent — handles any recruiter phrasing</div>
-    <div class="arr">Fuzzy matches to application by company + role (alias map handles JPMC vs JPMorgan)</div>
+    <div class="arr">Company alias map handles variations like JPMC vs JPMorgan Chase</div>
+    <div class="arr">Fuzzy matches email to application by company name + role title</div>
     <div class="arr">Status upgrades only — never downgrades the pipeline</div>
-    <div class="arr">Email labelled job-processed · Google Sheet synced</div>
-    <div class="sep">Auto-polling via cron (optional)</div>
+    <div class="arr">Email labelled job-processed in Gmail to prevent re-processing</div>
+    <div class="arr">Google Sheet synced automatically</div>
+    <div class="sep">Optional — auto-polling every 2 hours via cron</div>
     <code>crontab -e
 # Add this line:
 0 */2 * * * cd ~/Projects/job-automation && source .venv/bin/activate && claude "check email" >> logs/email_hook.log 2>&1</code>
@@ -207,17 +215,18 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
 
 <div style="background:var(--lbg);border:1px solid #b3d9ed;border-radius:10px;padding:14px 16px;margin-top:4px">
   <div style="font-weight:600;color:var(--teal);margin-bottom:10px;font-size:13px">📅 Recommended weekly rhythm</div>
-  <div class="rhythm-row"><span class="rhythm-when">Mon / Wed / Fri morning</span><span>Scout (Step 1) → review Sheet (Step 2) → pull → prep fires (Step 3)</span></div>
+  <div class="rhythm-row"><span class="rhythm-when">Daily (Mon–Fri)</span><span>python3 scripts/run_scout.py --age 1 — today only, cheapest</span></div>
+  <div class="rhythm-row"><span class="rhythm-when">Mon / Wed / Fri morning</span><span>Review Sheet (Step 2) → pull → prep fires (Step 3)</span></div>
   <div class="rhythm-row"><span class="rhythm-when">Mon / Wed / Fri evening</span><span>Submit applications (Step 4) for jobs prepped that day</span></div>
   <div class="rhythm-row"><span class="rhythm-when">Every 2h (auto via cron)</span><span>Email tracker polls and updates statuses (Step 5)</span></div>
-  <div class="rhythm-row"><span class="rhythm-when">Weekends</span><span>Review Sheet for interview invites, offers, or rejections</span></div>
+  <div class="rhythm-row"><span class="rhythm-when">After a break (7+ days)</span><span>python3 scripts/run_scout.py --age 7 --expanded</span></div>
 </div>
 </div>
 
 <!-- SHEET COLUMNS -->
 <div id="sheet" class="pane">
   <div style="font-size:11px;color:var(--gr);margin-bottom:10px">Only cols L, M, O need your input. Cols L and M have dropdowns applied automatically by sheets_sync push.</div>
-  <div class="warn" style="margin-bottom:12px"><strong>Edit order is critical:</strong> Fill Col M (career_page_url) FIRST, then set Col L (status) to Approved. Reversing causes prep to run without a destination URL.</div>
+  <div class="warn" style="margin-bottom:12px"><strong>Edit order is critical:</strong> Fill Col M (career_page_url) FIRST, then set Col L (status) to Approved. Reversing this causes prep to run without a destination URL.</div>
   <table class="sh">
     <tr><th>Col</th><th>Field</th><th>Description</th><th>Edit?</th></tr>
     <tr><td>A</td><td>id</td><td>Internal workflow ID (app_001 etc.)</td><td class="ro-col">Read-only</td></tr>
@@ -231,12 +240,12 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
     <tr><td>I</td><td>salary_stated</td><td>Salary / range from posting or description</td><td class="ro-col">Read-only</td></tr>
     <tr><td>J</td><td>work_mode</td><td>Remote / Hybrid (Xd/week) / On-site</td><td class="ro-col">Read-only</td></tr>
     <tr><td>K</td><td>experience_req</td><td>Years of experience required</td><td class="ro-col">Read-only</td></tr>
-    <tr><td style="color:var(--teal);font-weight:600">L</td><td>status</td><td>Pipeline status — strict dropdown</td><td class="edit-col">✏ Dropdown — set AFTER Col M</td></tr>
+    <tr><td style="color:var(--teal);font-weight:600">L</td><td>status</td><td>Pipeline status — strict dropdown (10 values)</td><td class="edit-col">✏ Set AFTER filling Col M</td></tr>
     <tr><td style="color:var(--teal);font-weight:600">M</td><td>career_page_url</td><td>ATS apply link — fill this FIRST</td><td class="edit-col">✏ Paste URL or type EASY_APPLY</td></tr>
     <tr><td>N</td><td>applied_date</td><td>Date application submitted</td><td class="ro-col">Read-only</td></tr>
     <tr><td style="color:var(--teal);font-weight:600">O</td><td>notes</td><td>Your notes / referral contact name</td><td class="edit-col">✏ Free text</td></tr>
     <tr><td>P</td><td>visa_sponsorship</td><td>Sponsorship status from JD</td><td class="ro-col">Read-only</td></tr>
-    <tr><td>Q</td><td>ats_type</td><td>ATS platform detected</td><td class="ro-col">Read-only</td></tr>
+    <tr><td>Q</td><td>ats_type</td><td>ATS platform detected (greenhouse, lever, workday…)</td><td class="ro-col">Read-only</td></tr>
   </table>
   <div style="margin-top:10px;font-size:11px;color:var(--gr)">
     <strong style="color:var(--teal)">Col L dropdown values:</strong> Shortlisted · Approved · Prep Complete · Applied · Under Review · Interview Scheduled · Assessment · Offer Received · Rejected · Withdrawn
@@ -247,7 +256,7 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
 <div id="quick" class="pane">
   <div style="font-size:11px;color:var(--gr);margin-bottom:12px">
     <span class="pt pt-p">› prompt</span> = type in Claude Code &nbsp;&nbsp;
-    <span class="pt pt-t">command</span> = run in terminal
+    <span class="pt pt-t">command</span> = run directly in terminal
   </div>
 
   <div class="sep">Session start</div>
@@ -255,8 +264,9 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
   <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Verify state</div><div class="prompt">Read CLAUDE.md and confirm all 5 stages are complete and tell me how many applications are in the tracker</div></div>
 
   <div class="sep">Job scraping</div>
-  <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Scout (default 7d)</div><div class="prompt">run scout</div></div>
-  <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Scout today only</div><div class="prompt">run scout --age 1</div></div>
+  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Scout — today only</div><code>python3 scripts/run_scout.py --age 1</code></div>
+  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Scout — last week</div><code>python3 scripts/run_scout.py --age 7</code></div>
+  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Scout — expanded list</div><code>python3 scripts/run_scout.py --age 7 --expanded</code></div>
   <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Cache status</div><code>python3 scripts/apify_cache.py status</code></div>
   <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Test scrape (3 jobs)</div><code>python3 scripts/test_apify_scrape.py --age 1</code></div>
   <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Clear stale cache</div><code>python3 scripts/apify_cache.py clear --old</code></div>
@@ -269,8 +279,8 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
   <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Backfill (35 days)</div><div class="prompt">check email backfill</div></div>
   <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Custom window</div><div class="prompt">check email last 45 days</div></div>
   <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Normal check</div><div class="prompt">check email</div></div>
-  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Test tracker</div><code>python3 scripts/test_email_tracker.py</code></div>
-  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> View active apps</div><code>python3 scripts/test_email_tracker.py --dry</code></div>
+  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> Test tracker (interactive)</div><code>python3 scripts/test_email_tracker.py</code></div>
+  <div class="qrow"><div class="qlabel"><span class="pt pt-t">T</span> View active apps only</div><code>python3 scripts/test_email_tracker.py --dry</code></div>
 
   <div class="sep">Application prep</div>
   <div class="qrow"><div class="qlabel"><span class="pt pt-p">P</span> Run prep</div><div class="prompt">Check for approved jobs and run application prep</div></div>
@@ -284,22 +294,26 @@ python3 scripts/apify_cache.py clear        # force fresh scrape</code>
 <div id="cost" class="pane">
   <div style="font-size:11px;color:var(--gr);margin-bottom:12px">All costs in USD. Resume tailoring and cover letter generation are free — they run inside Claude Code via your subscription.</div>
   <div class="cost-grid">
-    <div class="cost-card"><div class="cost-label">Apify — 1-day scrape (cheapest)</div><div class="cost-val">~$0.08</div><div class="cost-note">10 searches × ~25 jobs × $0.003</div></div>
-    <div class="cost-card"><div class="cost-label">Apify — 7-day scrape (default)</div><div class="cost-val">~$0.45</div><div class="cost-note">More results, more duplicates filtered</div></div>
+    <div class="cost-card"><div class="cost-label">Apify — 1-day scrape, 5 searches</div><div class="cost-val">~$0.08</div><div class="cost-note">Recommended for daily runs</div></div>
+    <div class="cost-card"><div class="cost-label">Apify — 7-day scrape, 5 searches</div><div class="cost-val">~$0.38</div><div class="cost-note">Use after weekends or breaks</div></div>
+    <div class="cost-card"><div class="cost-label">Apify — 7-day, 10 searches (--expanded)</div><div class="cost-val">~$0.75</div><div class="cost-note">Wider net, more duplicates filtered</div></div>
     <div class="cost-card"><div class="cost-label">Same-day re-run (cached)</div><div class="cost-val">$0.00</div><div class="cost-note">Served from disk — no Apify call</div></div>
     <div class="cost-card"><div class="cost-label">Email backfill (once, ~60 emails)</div><div class="cost-val">~$0.06</div><div class="cost-note">Haiku 4.5 · $0.001/email</div></div>
-    <div class="cost-card"><div class="cost-label">Email polling (ongoing/month)</div><div class="cost-val">&lt;$0.10</div><div class="cost-note">~60–100 emails/month</div></div>
     <div class="cost-card"><div class="cost-label">Resume + cover letter prep</div><div class="cost-val">$0.00</div><div class="cost-note">Claude Code subscription — free</div></div>
   </div>
+
   <div style="margin-top:14px;background:var(--lbg);border:1px solid #b3d9ed;border-radius:8px;padding:12px 14px">
     <div style="font-weight:600;color:var(--teal);margin-bottom:8px;font-size:13px">Cost optimisation tips</div>
-    <div class="arr">Use <code style="display:inline;background:transparent;color:inherit;padding:0;font-family:monospace;font-size:11px">--age 1</code> for daily runs — only brand new postings, minimum cost</div>
-    <div class="arr">Use <code style="display:inline;background:transparent;color:inherit;padding:0;font-family:monospace;font-size:11px">--age 7</code> after a weekend or break to catch missed postings</div>
-    <div class="arr">Cache means running scout twice same day costs nothing extra</div>
-    <div class="arr">Duplicate check prevents scoring same job twice across different scrape runs</div>
+    <div class="arr">run_scout.py shows exact cost estimate and asks Y/n before every Apify call</div>
+    <div class="arr">--age 1 daily = cheapest, only brand new postings</div>
+    <div class="arr">Cache means running scout twice same day = $0.00 second run</div>
+    <div class="arr">maxJobs=25 is a ceiling — if LinkedIn has 8 results you pay for 8, not 25</div>
+    <div class="arr">Duplicate check prevents scoring the same job across different scrape runs</div>
+    <div class="arr">$5 Apify free credit covers ~60 daily runs or ~13 weekly runs</div>
   </div>
+
   <div style="margin-top:10px;font-size:12px;color:var(--gr);padding:10px 0;border-top:1px solid var(--border)">
-    Typical monthly total (3 scouts/week + daily email polling): <strong style="color:var(--dk)">~$0.50–$1.50</strong>
+    Typical monthly total (daily --age 1 + email polling): <strong style="color:var(--dk)">~$2.50–$4.00</strong>
   </div>
 </div>
 
